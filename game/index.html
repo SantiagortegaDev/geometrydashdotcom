@@ -14,9 +14,27 @@
     var levelId = Number(new URLSearchParams(location.search).get('id'));
     var levelString = new URLSearchParams(location.search).get('string');
     var songID = Number(new URLSearchParams(location.search).get('songID')) || 500476;
+
     async function start() {
-      await navigator.serviceWorker.register('../worker.js');
+      const reg = await navigator.serviceWorker.register('../worker.js');
       await navigator.serviceWorker.ready;
+
+      // FIX: Si el SW está activo pero aún no controla esta página,
+      // hacer claim y recargar una sola vez para que tome control
+      if (!navigator.serviceWorker.controller) {
+        if (!sessionStorage.getItem('sw-reloaded')) {
+          sessionStorage.setItem('sw-reloaded', '1');
+          // Pedirle al SW que tome control inmediato
+          if (reg.active) {
+            reg.active.postMessage('skipWaiting');
+          }
+          window.location.reload();
+          return;
+        }
+      }
+
+      // Limpiar flag para que funcione en futuras cargas frescas
+      sessionStorage.removeItem('sw-reloaded');
 
       if (levelString) {
         navigator.serviceWorker.controller?.postMessage({
@@ -32,6 +50,7 @@
       script.src = './assets/index-game.js';
       document.body.appendChild(script);
     }
+
     function updateLevelName() {
       if (levelString) {
         window.levelName = "Local Level";
@@ -72,9 +91,11 @@
         }
       }
     }
+
     start();
     setTimeout(updateLevelName, 1000);
   </script>
+
   <script>
     let fix = false;
     navigator.serviceWorker.addEventListener("message", (event) => {
@@ -95,71 +116,60 @@
       }
     });
   </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
   <script>
-  // Esperar a que el juego cargue y monitorear GameScene._levelWon
-  function watchForLevelComplete() {
-    const interval = setInterval(() => {
-      try {
-        // El juego expone GameScene en window o en algún objeto global
-        // Buscar en todos los objetos globales posibles
-        const scene = window.GameScene 
-                   || window.game?.scene?.scenes?.[0]
-                   || window.gameScene;
+    // Monitorear GameScene._levelWon para capturar cuando el jugador gana
+    function watchForLevelComplete() {
+      const interval = setInterval(() => {
+        try {
+          const scene = window.GameScene
+                     || window.game?.scene?.scenes?.[0]
+                     || window.gameScene;
 
-        if (!scene) return; // aún no cargó
+          if (!scene) return;
 
-        if (scene._levelWon === true) {
-          clearInterval(interval);
+          if (scene._levelWon === true) {
+            clearInterval(interval);
 
-          // Capturar en el siguiente frame (canvas tiene contenido)
-          requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              const canvas = document.querySelector('canvas');
-              if (canvas) {
-                const imageUrl = canvas.toDataURL('image/png');
-                window.parent.postMessage({
-                  type: 'level-complete',
-                  imageUrl: imageUrl
-                }, '*');
-              }
+              requestAnimationFrame(() => {
+                const canvas = document.querySelector('canvas');
+                if (canvas) {
+                  const imageUrl = canvas.toDataURL('image/png');
+                  window.parent.postMessage({
+                    type: 'level-complete',
+                    imageUrl: imageUrl
+                  }, '*');
+                }
+              });
             });
-          });
-        }
-      } catch(e) {}
-    }, 500); // checar cada 500ms
-  }
-
-  // Esperar a que el juego inicialice
-  window.addEventListener('load', () => {
-    setTimeout(watchForLevelComplete, 3000);
-  });
-
-  // También escuchar el mensaje manual por si acaso
-  window.addEventListener('message', (event) => {
-    if (event.data === 'dame-tu-captura') {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const canvas = document.querySelector('canvas');
-          if (canvas) {
-            window.parent.postMessage({
-              type: 'iframe-screenshot',
-              imageUrl: canvas.toDataURL('image/png')
-            }, '*');
           }
-        });
-      });
+        } catch(e) {}
+      }, 500);
     }
-  });
-</script>  
-  <script>
-      // Este código tiene que estar en la página del otro dominio
 
-    
+    window.addEventListener('load', () => {
+      setTimeout(watchForLevelComplete, 3000);
+    });
 
-    
-    // ResizeObserver catches iframe size changes that window.resize misses
-    // (e.g. parent window maximize, snap, title bar drag)
+    // Captura manual por si acaso
+    window.addEventListener('message', (event) => {
+      if (event.data === 'dame-tu-captura') {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const canvas = document.querySelector('canvas');
+            if (canvas) {
+              window.parent.postMessage({
+                type: 'iframe-screenshot',
+                imageUrl: canvas.toDataURL('image/png')
+              }, '*');
+            }
+          });
+        });
+      }
+    });
+
+    // ResizeObserver para que el canvas responda a cambios de tamaño del iframe
     new ResizeObserver(() => {
       window.dispatchEvent(new Event('resize'));
     }).observe(document.documentElement);
