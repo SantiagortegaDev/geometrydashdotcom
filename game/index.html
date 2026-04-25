@@ -97,20 +97,34 @@
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
+   window.addEventListener('message', (event) => {
+    if (event.data === 'dame-tu-captura') {
+      // Buscar el canvas del juego (WebGL)
+      const canvas = document.querySelector('canvas');
+      
+      if (canvas) {
+        try {
+          const imageUrl = canvas.toDataURL('image/png');
+          window.parent.postMessage({
+            type: 'iframe-screenshot',
+            imageUrl: imageUrl
+          }, '*');
+        } catch (e) {
+          // Canvas tainted (poco probable si es mismo origen del juego)
+          window.parent.postMessage({ type: 'iframe-screenshot-error', error: e.message }, '*');
+        }
+      } else {
+        window.parent.postMessage({ type: 'iframe-screenshot-error', error: 'No canvas found' }, '*');
+      }
+    }
+  });
+</script>
+  <script>
       // Este código tiene que estar en la página del otro dominio
 
     
 
-    window.addEventListener('message', (event) => {
-        if (event.data === 'dame-tu-captura') {
-            html2canvas(document.body).then(canvas => {
-                window.parent.postMessage({
-                    type: 'iframe-screenshot',
-                    imageUrl: canvas.toDataURL('image/png')
-                }, '*');
-            });
-        }
-    });
+    
     // ResizeObserver catches iframe size changes that window.resize misses
     // (e.g. parent window maximize, snap, title bar drag)
     new ResizeObserver(() => {
