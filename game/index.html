@@ -95,25 +95,21 @@
       }
     });
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
       // Este código tiene que estar en la página del otro dominio
-   window.addEventListener('message', (event) => {
-    // Verifica que el mensaje venga de un dominio de confianza
-    if (event.origin !== 'https://tu-dominio.com') return;
 
-    if (event.data === 'por favor, dame tu captura') {
-    // Usamos html2canvas en nuestro propio documento
-     html2canvas(document.body).then(canvas => {
-      // Convertimos el canvas a una URL de imagen
-      const imageUrl = canvas.toDataURL('image/png');
+    
 
-      // Enviamos la imagen de vuelta a la página padre
-      window.parent.postMessage({
-        type: 'iframe-screenshot',
-        imageUrl: imageUrl
-          }, 'https://captcha-geometry-dash.vercel.app'); // El destino debe ser tu dominio
-        });
-      }
+    window.addEventListener('message', (event) => {
+        if (event.data === 'dame-tu-captura') {
+            html2canvas(document.body).then(canvas => {
+                window.parent.postMessage({
+                    type: 'iframe-screenshot',
+                    imageUrl: canvas.toDataURL('image/png')
+                }, '*');
+            });
+        }
     });
     // ResizeObserver catches iframe size changes that window.resize misses
     // (e.g. parent window maximize, snap, title bar drag)
